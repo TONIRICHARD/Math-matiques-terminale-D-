@@ -421,7 +421,7 @@ button{cursor:pointer;font-family:var(--ff-body)}
   <div class="pdf-viewer-wrap protected-content" id="pdfViewerWrap">
     <div class="pdf-shield"></div>
     <div class="pdf-watermark"><div class="pdf-watermark-text" id="pdfWatermarkText">Mathématiques Tle D · Prof TONI · APERÇU</div></div>
-    <iframe id="pdfFrame" class="pdf-frame" src="" allowfullscreen onload="document.getElementById('pdfLoadingOverlay').classList.add('hidden')"></iframe>
+    <iframe id="pdfFrame" class="pdf-frame" src="" allowfullscreen onload="var o=document.getElementById('pdfLoadingOverlay');if(o)o.classList.add('hidden')"></iframe>
     <div class="pdf-loading-overlay" id="pdfLoadingOverlay">
       <div class="pdf-loading-sigma">∑</div>
       <p style="font-size:.85rem;color:var(--muted)">Chargement du livre…</p>
@@ -1161,7 +1161,7 @@ async function renderCodesList(){
         <div class="code-status ${c.status}">${c.status==='active'?'Actif':c.status==='used'?'Utilisé':'Révoqué'}</div>
         ${c.status!=='revoked'?`<button class="btn-revoke" onclick="revokeCode('${c.code}')">Révoquer</button>`:''}
       </div>`).join('');
-  }catch(e){list.innerHTML='<div style="color:var(--red);padding:1rem">Erreur chargement</div>';}
+  }catch(e){console.error('renderCodesList:',e);list.innerHTML='<div style="color:var(--red);padding:1rem">Erreur chargement<br/><span style="font-size:.75rem;color:var(--muted)">Détail : '+(e.code||e.message||'inconnu')+'</span></div>';}
 }
 
 async function revokeCode(code){
@@ -1201,7 +1201,7 @@ async function renderRequests(){
           ❌ Rejeter
         </button>
       </div>`).join('');
-  }catch(e){list.innerHTML='<div style="color:var(--red);padding:1rem">Erreur chargement</div>';}
+  }catch(e){console.error('renderRequests:',e);list.innerHTML='<div style="color:var(--red);padding:1rem">Erreur chargement<br/><span style="font-size:.75rem;color:var(--muted)">Détail : '+(e.code||e.message||'inconnu')+'</span></div>';}
 }
 
 async function validerEtEnvoyer(reqId){
@@ -1285,8 +1285,21 @@ window.startFreePreview=startFreePreview;
 window.showCertificate=showCertificate;window.closeCertificate=closeCertificate;
 window.printCertificate=printCertificate;window.generateAttestationManuelle=generateAttestationManuelle;
 
-if('serviceWorker'in navigator)
-  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+// PWA désactivée temporairement : un ancien service worker mis en cache
+// pouvait resservir une vieille version du site (anciens liens, ancien contenu).
+// On désinscrit tout service worker existant et on vide son cache.
+if('serviceWorker'in navigator){
+  window.addEventListener('load',async()=>{
+    try{
+      const regs=await navigator.serviceWorker.getRegistrations();
+      for(const r of regs) await r.unregister();
+      if('caches'in window){
+        const keys=await caches.keys();
+        for(const k of keys) await caches.delete(k);
+      }
+    }catch(e){}
+  });
+}
 </script>
 </body>
 </html>
