@@ -134,12 +134,11 @@ button{cursor:pointer;font-family:var(--ff-body)}
 .timer-fill.warning{background:var(--red)}
 .pdf-viewer-wrap{margin:0 1.2rem 1rem;border-radius:var(--r);overflow:hidden;border:1px solid var(--border);position:relative}
 .pdf-shield{position:absolute;inset:0;z-index:10;background:transparent;pointer-events:none}
+.pdf-corner-mask{position:absolute;top:0;right:0;width:96px;height:120px;z-index:15;background:var(--card);border-bottom-left-radius:14px;display:flex;align-items:flex-start;justify-content:center;padding-top:10px;font-size:1.1rem;opacity:.98;pointer-events:auto;touch-action:pan-y;-webkit-touch-callout:none;user-select:none}
 
 .pdf-watermark{position:absolute;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden}
 .pdf-watermark-text{font-family:var(--ff-head);font-size:1.1rem;color:rgba(201,168,76,.12);transform:rotate(-35deg);white-space:nowrap;letter-spacing:.05em;line-height:2.8;text-align:center;width:200%;word-break:break-all}
-.pdf-pages{width:100%;height:72vh;overflow-y:auto;overflow-x:hidden;background:#1b1b1b;-webkit-overflow-scrolling:touch;touch-action:pan-y pinch-zoom;-webkit-user-select:none;user-select:none}
-.pdf-page{display:block;width:calc(100% - 12px);margin:6px auto;background:#fff;position:relative}
-.pdf-page canvas{display:block;width:100%;height:100%;pointer-events:none}
+.pdf-frame{width:100%;height:72vh;border:none;display:block}
 .pdf-loading-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8rem;background:var(--card);z-index:20;transition:opacity .5s}
 .pdf-loading-overlay.hidden{opacity:0;pointer-events:none}
 .pdf-loading-sigma{font-family:var(--ff-head);font-size:3rem;color:var(--gold);animation:breathe 1.4s ease infinite}
@@ -423,8 +422,9 @@ button{cursor:pointer;font-family:var(--ff-body)}
   </div>
   <div class="pdf-viewer-wrap protected-content" id="pdfViewerWrap">
     <div class="pdf-shield"></div>
+    <div class="pdf-corner-mask" oncontextmenu="return false" onclick="event.preventDefault();event.stopPropagation()">🔒</div>
     <div class="pdf-watermark"><div class="pdf-watermark-text" id="pdfWatermarkText">Mathématiques Tle D · Prof TONI · APERÇU</div></div>
-    <div id="pdfPages" class="pdf-pages"></div>
+    <iframe id="pdfFrame" class="pdf-frame" src="" allowfullscreen onload="var o=document.getElementById('pdfLoadingOverlay');if(o)o.classList.add('hidden')"></iframe>
     <div class="pdf-loading-overlay" id="pdfLoadingOverlay">
       <div class="pdf-loading-sigma">∑</div>
       <p style="font-size:.85rem;color:var(--muted)">Chargement du livre…</p>
@@ -534,9 +534,10 @@ button{cursor:pointer;font-family:var(--ff-body)}
   </div>
   <div class="admin-pane" id="pane-settings">
     <div class="gen-box">
-      <h3>⚙️ URL du site</h3>
+      <h3>⚙️ Lien Drive du PDF et URL du site</h3>
       <p style="font-size:.78rem;color:var(--muted);margin-bottom:.8rem">Modifiez ces valeurs sans toucher au code. Elles sont sauvegardées dans Firebase et prennent effet immédiatement pour tout le monde.</p>
       <div class="gen-form">
+        <div class="form-group"><label class="form-label">Lien Drive "preview" du PDF</label><input class="gen-input" id="settingsPdfLink" placeholder="https://drive.google.com/file/d/.../preview" type="text"/></div>
         <div class="form-group"><label class="form-label">URL du site (envoyée aux acheteurs)</label><input class="gen-input" id="settingsSiteUrl" placeholder="maths-tled.netlify.app" type="text"/></div>
         <button class="btn-generate" onclick="saveSettings()">💾 Enregistrer</button>
       </div>
@@ -599,7 +600,6 @@ button{cursor:pointer;font-family:var(--ff-body)}
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script type="module">
 // ── Firebase SDK ────────────────────────────────────────────────────────────
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
@@ -627,8 +627,8 @@ const CONFIG = {
   phone:          '22654368180',
   price:          3000,
   previewSeconds: 45,
-  // ⚠️ À REMPLACER : URL de la Cloud Function "servirlivre" (affichée à la fin du déploiement)
-  apiUrl:         'COLLEZ_ICI_URL_FONCTION_SERVIRLIVRE',
+  // ⚠️ À REMPLACER : lien Drive "preview" du PDF de Mathématiques Terminale D
+  pdfPreview:     'https://drive.google.com/file/d/COLLEZ_ICI_ID_DU_PDF/preview',
   // ⚠️ À REMPLACER : l'URL de déploiement de CE site (maths Tle D), différente des autres sites
   siteUrl:        'maths-tled.netlify.app'
 };
@@ -658,6 +658,7 @@ async function loadRemoteConfig(){
     const snap=await getDoc(doc(db,'settings_maths_td','config'));
     if(snap.exists()){
       const d=snap.data();
+      if(d.pdfPreview)CONFIG.pdfPreview=d.pdfPreview;
       if(d.siteUrl)CONFIG.siteUrl=d.siteUrl;
     }
   }catch(e){console.error('loadRemoteConfig:',e);}
@@ -731,6 +732,9 @@ function initProtections(){
     }
   });
   document.addEventListener('dragstart',e=>e.preventDefault());
+  document.addEventListener('touchstart',e=>{
+    if(e.target.closest('.pdf-viewer-wrap'))e.preventDefault();
+  },{passive:false});
   const s=document.createElement('style');
   s.textContent=`.pdf-viewer-wrap{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;}@media print{body>*:not(#certOverlay){display:none!important;}}`;
   document.head.appendChild(s);
@@ -767,7 +771,7 @@ function stopTimer(){
 }
 
 function triggerBlock(){
-  clearViewer();
+  document.getElementById('pdfFrame').src='';
   document.getElementById('blockScreen').classList.add('active');
 }
 
@@ -878,81 +882,6 @@ async function checkCode(){
   }
 }
 
-
-// ══════════════════════════════════════════════════════════════════════════
-//  LECTEUR PDF SÉCURISÉ (pdf.js) — le PDF vient de la Cloud Function,
-//  filigrané au nom + code de l'acheteur. Plus d'iframe Drive, plus de bouton.
-// ══════════════════════════════════════════════════════════════════════════
-let viewerToken=0;
-function clearViewer(){
-  viewerToken++;
-  const box=document.getElementById('pdfPages');
-  if(box)box.innerHTML='';
-}
-async function loadPdfViewer(isPreview){
-  const box=document.getElementById('pdfPages');
-  const overlay=document.getElementById('pdfLoadingOverlay');
-  clearViewer();
-  const token=viewerToken;
-  overlay.classList.remove('hidden');
-  try{
-    const body=isPreview?{preview:true}:{code:currentUser.code,deviceId:getDeviceId()};
-    const res=await fetch(CONFIG.apiUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(res.status===403||res.status===401){
-      showToast('🔒 Accès refusé. Contactez Prof. TONI.',4000);
-      if(!isPreview)logout();
-      return;
-    }
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const buf=await res.arrayBuffer();
-    if(token!==viewerToken)return;
-    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-    if(token!==viewerToken)return;
-
-    const first=await pdf.getPage(1);
-    const vp1=first.getViewport({scale:1});
-    const cssW=box.clientWidth-12;
-    const dpr=Math.min(window.devicePixelRatio||1,2);
-    const rendered=new Map();
-
-    const io=new IntersectionObserver(async entries=>{
-      for(const en of entries){
-        const el=en.target,n=+el.dataset.n;
-        if(en.isIntersecting&&!rendered.get(n)){
-          rendered.set(n,true);
-          try{
-            const page=await pdf.getPage(n);
-            if(token!==viewerToken)return;
-            const base=page.getViewport({scale:1});
-            const vp=page.getViewport({scale:(cssW/base.width)*dpr});
-            const cv=el.querySelector('canvas');
-            cv.width=vp.width;cv.height=vp.height;
-            await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
-            if(n===1)overlay.classList.add('hidden');
-          }catch(e){rendered.set(n,false);}
-        }else if(!en.isIntersecting&&rendered.get(n)){
-          const cv=el.querySelector('canvas');
-          cv.width=1;cv.height=1;rendered.set(n,false);
-        }
-      }
-    },{root:box,rootMargin:'700px 0px'});
-
-    for(let n=1;n<=pdf.numPages;n++){
-      const d=document.createElement('div');
-      d.className='pdf-page';d.dataset.n=n;
-      d.style.height=(cssW*vp1.height/vp1.width)+'px';
-      d.appendChild(document.createElement('canvas'));
-      box.appendChild(d);io.observe(d);
-    }
-    setTimeout(()=>overlay.classList.add('hidden'),8000);
-  }catch(e){
-    console.error('loadPdfViewer:',e);
-    overlay.classList.add('hidden');
-    showToast('❌ Impossible de charger le livre. Vérifiez votre connexion.',4000);
-  }
-}
-
 // ── Ouvrir le livre ─────────────────────────────────────────────────────────
 function openBook(isPreview){
   stopTimer();
@@ -972,14 +901,14 @@ function openBook(isPreview){
       `Propriété de ${currentUser.name} · Code ${currentUser.code} · © Prof TONI · `.repeat(4);
     document.getElementById('timerWrap').style.display='none';
   }
-  loadPdfViewer(isPreview);
+  document.getElementById('pdfFrame').src=CONFIG.pdfPreview;
   document.getElementById('blockScreen').classList.remove('active');
   go('book');
 }
 
 function logout(){
   stopTimer();currentUser=null;localStorage.removeItem('mtd_user');
-  clearViewer();
+  document.getElementById('pdfFrame').src='';
   document.getElementById('landingCodeInput').value='';
   document.getElementById('codeMsgLanding').textContent='';
   document.getElementById('blockScreen').classList.remove('active');
@@ -989,7 +918,7 @@ function logout(){
 function blockBuy(){document.getElementById('blockScreen').classList.remove('active');go('payment');}
 function blockGoCode(){
   document.getElementById('blockScreen').classList.remove('active');
-  clearViewer();
+  document.getElementById('pdfFrame').src='';
   go('landing');
   setTimeout(()=>document.getElementById('landingCodeInput').focus(),400);
 }
@@ -1105,15 +1034,17 @@ function adminTab(tab){
 }
 
 function renderSettings(){
+  document.getElementById('settingsPdfLink').value=CONFIG.pdfPreview;
   document.getElementById('settingsSiteUrl').value=CONFIG.siteUrl;
 }
 
 async function saveSettings(){
+  const pdfPreview=document.getElementById('settingsPdfLink').value.trim();
   const siteUrl=document.getElementById('settingsSiteUrl').value.trim();
-  if(!siteUrl){showToast('⚠️ Entrez l\'URL du site');return;}
+  if(!pdfPreview||!siteUrl){showToast('⚠️ Remplissez les deux champs');return;}
   try{
-    await setDoc(doc(db,'settings_maths_td','config'),{siteUrl,updatedAt:new Date().toISOString()});
-    CONFIG.siteUrl=siteUrl;
+    await setDoc(doc(db,'settings_maths_td','config'),{pdfPreview,siteUrl,updatedAt:new Date().toISOString()});
+    CONFIG.pdfPreview=pdfPreview;CONFIG.siteUrl=siteUrl;
     showToast('✅ Réglages enregistrés !');
   }catch(e){showToast('❌ Erreur Firebase');console.error(e);}
 }
